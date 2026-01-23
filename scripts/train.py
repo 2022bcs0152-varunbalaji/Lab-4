@@ -6,8 +6,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_squared_error, f1_score
 
-DATA_PATH = "Lab_4/dataset/winequality-red.csv"
-
+DATA_PATH = "dataset/winequality-red.csv"
 data = pd.read_csv(DATA_PATH, sep=";")
 
 X = data.drop("quality", axis=1)
