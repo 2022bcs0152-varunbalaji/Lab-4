@@ -34,6 +34,7 @@ jobs:
             model.pkl
             metrics.json
 
+
   deploy:
     needs: train
     runs-on: ubuntu-latest
@@ -54,8 +55,10 @@ jobs:
 
       - name: Check Improvement
         run: |
-          echo "Current MSE: $MSE, Best MSE: ${{ vars.BEST_MSE }}"
-          echo "Current F1: $F1, Best F1: ${{ vars.BEST_F1 }}"
+          echo "Current MSE: $MSE"
+          echo "Best MSE: ${{ vars.BEST_MSE }}"
+          echo "Current F1: $F1"
+          echo "Best F1: ${{ vars.BEST_F1 }}"
 
           if (( $(echo "$MSE >= ${{ vars.BEST_MSE }}" | bc -l) )) || \
              (( $(echo "$F1 <= ${{ vars.BEST_F1 }}" | bc -l) )); then
@@ -63,14 +66,14 @@ jobs:
             exit 0
           fi
 
-      # ✅ CORRECT DOCKER LOGIN (NON-TTY SAFE)
+      # ✅ NON-INTERACTIVE, CI-SAFE DOCKER LOGIN
       - name: Docker Login
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
 
-      # ✅ CORRECT BUILD & PUSH (NO buildx ERROR)
+      # ✅ BUILD & PUSH IMAGE (NO buildx ERROR)
       - name: Build & Push Image
         uses: docker/build-push-action@v5
         with:
@@ -85,5 +88,3 @@ jobs:
           gh variable set BEST_F1 -b "$F1"
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
-
-
