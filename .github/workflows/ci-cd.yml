@@ -75,9 +75,3 @@ jobs:
             ${{ env.IMAGE_NAME }}:latest
             ${{ env.IMAGE_NAME }}:${{ github.run_number }}
 
-      - name: Update best metrics
-        env:
-          GH_TOKEN: ${{ secrets.GH_PAT }}
-        run: |
-          gh variable set BEST_MSE -b "$MSE"
-          gh variable set BEST_F1 -b "$F1"
