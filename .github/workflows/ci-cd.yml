@@ -1,0 +1,77 @@
+name: Lab-4 CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  train:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Train Model
+        run: |
+          python scripts/train.py
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: model-artifacts
+          path: |
+            model.pkl
+            metrics.json
+
+  deploy:
+    needs: train
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: model-artifacts
+
+      - name: Read Metrics
+        id: metrics
+        run: |
+          echo "MSE=$(jq .mse metrics.json)" >> $GITHUB_ENV
+          echo "F1=$(jq .f1_score metrics.json)" >> $GITHUB_ENV
+
+      - name: Check Improvement
+        run: |
+          if (( $(echo "$MSE >= ${{ vars.BEST_MSE }}" | bc -l) )) || \
+             (( $(echo "$F1 <= ${{ vars.BEST_F1 }}" | bc -l) )); then
+            echo "2022BCS0152 ---- Metric did not improve"
+            exit 0
+          fi
+
+      - name: Docker Login
+        run: |
+          echo "${{ secrets.DOCKER_TOKEN }}" | docker login -u ${{ secrets.DOCKER_USERNAME }} --password-stdin
+
+      - name: Build & Push Image
+        run: |
+          docker build -t ${{ secrets.DOCKER_USERNAME }}/wine-api:latest .
+          docker push ${{ secrets.DOCKER_USERNAME }}/wine-api:latest
+
+      - name: Update Best Metrics
+        run: |
+          gh variable set BEST_MSE -b "$MSE"
+          gh variable set BEST_F1 -b "$F1"
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
