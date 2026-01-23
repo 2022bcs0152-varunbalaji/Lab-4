@@ -4,12 +4,15 @@ on:
   push:
     branches: [ main ]
 
+env:
+  IMAGE_NAME: svarunbalaji2022bcs0152/wine-api
+
 jobs:
   train:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Code
+      - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Setup Python
@@ -17,16 +20,13 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install Dependencies
-        run: |
-          pip install -r requirements.txt
-          pip install pandas scikit-learn joblib jq
+      - name: Install dependencies
+        run: pip install -r requirements.txt
 
-      - name: Train Model
-        run: |
-          python scripts/train.py
+      - name: Train model
+        run: python scripts/train.py
 
-      - name: Upload Artifacts
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: model-artifacts
@@ -34,57 +34,50 @@ jobs:
             model.pkl
             metrics.json
 
-
   deploy:
     needs: train
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Code
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Download Artifacts
+      - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
           name: model-artifacts
 
-      - name: Read Metrics
+      - name: Read metrics
         run: |
           echo "MSE=$(jq .mse metrics.json)" >> $GITHUB_ENV
           echo "F1=$(jq .f1_score metrics.json)" >> $GITHUB_ENV
 
-      - name: Check Improvement
+      - name: Check improvement
         run: |
-          echo "Current MSE: $MSE"
-          echo "Best MSE: ${{ vars.BEST_MSE }}"
-          echo "Current F1: $F1"
-          echo "Best F1: ${{ vars.BEST_F1 }}"
-
           if (( $(echo "$MSE >= ${{ vars.BEST_MSE }}" | bc -l) )) || \
              (( $(echo "$F1 <= ${{ vars.BEST_F1 }}" | bc -l) )); then
             echo "2022BCS0152 ---- Metric did not improve"
             exit 0
           fi
 
-      # ✅ NON-INTERACTIVE, CI-SAFE DOCKER LOGIN
-      - name: Docker Login
+      - name: Docker login
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
 
-      # ✅ BUILD & PUSH IMAGE (NO buildx ERROR)
-      - name: Build & Push Image
+      - name: Build and push image
         uses: docker/build-push-action@v5
         with:
           context: .
           push: true
           tags: |
-            ${{ secrets.DOCKER_USERNAME }}/wine-api:latest
+            ${{ env.IMAGE_NAME }}:latest
+            ${{ env.IMAGE_NAME }}:${{ github.run_number }}
 
-      - name: Update Best Metrics
+      - name: Update best metrics
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
         run: |
           gh variable set BEST_MSE -b "$MSE"
           gh variable set BEST_F1 -b "$F1"
-        env:
-          GH_TOKEN: ${{ secrets.GH_PAT }}
