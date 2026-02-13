@@ -7,12 +7,6 @@ pipeline {
 
     stages {
 
-        stage('Clone Repository') {
-            steps {
-                git 'https://github.com/2022bcs0152-varunbalaji/Lab-4.git'
-            }
-        }
-
         stage('Install Dependencies') {
             steps {
                 sh '''
@@ -27,7 +21,7 @@ pipeline {
             steps {
                 sh '''
                 . venv/bin/activate
-                python scripts/train.py 
+                python scripts/train.py
                 echo "Name: Varun Balaji"
                 echo "Roll No: 2022BCS0152"
                 '''
