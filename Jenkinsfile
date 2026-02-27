@@ -1,50 +1,92 @@
-
-
 pipeline {
     agent any
 
     environment {
-        DOCKER_IMAGE = "svarunbalaji2022bcs0152/wine-api:latest"
+        IMAGE_NAME = "svarunbalaji2022bcs0152/wine-api:latest"
+        CONTAINER_NAME = "wine_test_container"
+        PORT = "8000"
     }
 
     stages {
 
-        stage('Install Dependencies') {
+        stage('Pull Image') {
+            steps {
+                sh 'docker pull $IMAGE_NAME'
+            }
+        }
+
+        stage('Run Container') {
             steps {
                 sh '''
-                python3 -m venv venv
-                . venv/bin/activate
-                pip install -r requirements.txt
+                docker run -d -p 8000:8000 --name $CONTAINER_NAME $IMAGE_NAME
                 '''
             }
         }
 
-        stage('Train Model') {
+        stage('Wait for Service Readiness') {
             steps {
-                sh '''
-                . venv/bin/activate
-                python scripts/train.py
-                echo "Name: Varun Balaji"
-                echo "Roll No: 2022BCS0152"
-                '''
-            }
-        }
-
-        stage('Build Docker Image') {
-            steps {
-                sh 'docker build -t $DOCKER_IMAGE .'
-            }
-        }
-
-        stage('Push to DockerHub') {
-            steps {
-                withCredentials([string(credentialsId: 'dockerhub-token', variable: 'DOCKER_PASS')]) {
-                    sh '''
-                    echo $DOCKER_PASS | docker login -u svarunbalaji2022bcs0152 --password-stdin
-                    docker push $DOCKER_IMAGE
-                    '''
+                script {
+                    timeout(time: 60, unit: 'SECONDS') {
+                        waitUntil {
+                            def status = sh(
+                                script: "curl -s -o /dev/null -w '%{http_code}' http://localhost:8000/docs",
+                                returnStdout: true
+                            ).trim()
+                            return (status == "200")
+                        }
+                    }
                 }
             }
+        }
+
+        stage('Send Valid Inference Request') {
+            steps {
+                script {
+                    def response = sh(
+                        script: "curl -s -X POST http://localhost:8000/predict -H 'Content-Type: application/json' -d @tests/valid.json",
+                        returnStdout: true
+                    )
+
+                    echo "Valid Response: ${response}"
+
+                    if (!response.contains("prediction")) {
+                        error("Prediction field missing in valid response")
+                    }
+                }
+            }
+        }
+
+        stage('Send Invalid Request') {
+            steps {
+                script {
+                    def status = sh(
+                        script: "curl -s -o /dev/null -w '%{http_code}' -X POST http://localhost:8000/predict -H 'Content-Type: application/json' -d @tests/invalid.json",
+                        returnStdout: true
+                    ).trim()
+
+                    if (status == "200") {
+                        error("Invalid request should not return 200")
+                    }
+                }
+            }
+        }
+
+        stage('Stop Container') {
+            steps {
+                sh '''
+                docker stop $CONTAINER_NAME || true
+                docker rm $CONTAINER_NAME || true
+                '''
+            }
+        }
+    }
+
+    post {
+        failure {
+            echo "Pipeline FAILED ❌"
+        }
+        success {
+            echo "Pipeline PASSED ✅"
         }
     }
 }
