@@ -4,7 +4,6 @@ pipeline {
     environment {
         IMAGE_NAME = "svarunbalaji2022bcs0152/wine-api:latest"
         CONTAINER_NAME = "wine_test_container"
-        PORT = "8000"
     }
 
     stages {
@@ -19,7 +18,7 @@ pipeline {
             steps {
                 sh '''
                 docker rm -f $CONTAINER_NAME || true
-                docker run -d --name $CONTAINER_NAME $IMAGE_NAME
+                docker run -d -p 8000:8000 --name $CONTAINER_NAME $IMAGE_NAME
                 '''
             }
         }
@@ -30,7 +29,7 @@ pipeline {
                     timeout(time: 60, unit: 'SECONDS') {
                         waitUntil {
                             def status = sh(
-                                script: "docker exec $CONTAINER_NAME curl -s -o /dev/null -w '%{http_code}' http://localhost:8000/docs",
+                                script: "curl -s -o /dev/null -w '%{http_code}' http://localhost:8000/docs",
                                 returnStdout: true
                             ).trim()
                             return (status == "200")
@@ -44,7 +43,7 @@ pipeline {
             steps {
                 script {
                     def response = sh(
-                        script: "docker exec $CONTAINER_NAME curl -s -X POST http://localhost:8000/predict -H 'Content-Type: application/json' -d @tests/valid.json",
+                        script: "curl -s -X POST http://localhost:8000/predict -H 'Content-Type: application/json' -d @tests/valid.json",
                         returnStdout: true
                     ).trim()
 
@@ -61,7 +60,7 @@ pipeline {
             steps {
                 script {
                     def status = sh(
-                        script: "docker exec $CONTAINER_NAME curl -s -o /dev/null -w '%{http_code}' -X POST http://localhost:8000/predict -H 'Content-Type: application/json' -d @tests/invalid.json",
+                        script: "curl -s -o /dev/null -w '%{http_code}' -X POST http://localhost:8000/predict -H 'Content-Type: application/json' -d @tests/invalid.json",
                         returnStdout: true
                     ).trim()
 
