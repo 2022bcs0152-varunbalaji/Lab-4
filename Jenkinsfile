@@ -4,6 +4,7 @@ pipeline {
     environment {
         IMAGE_NAME = "svarunbalaji2022bcs0152/wine-api:latest"
         CONTAINER_NAME = "wine_test_container"
+        NETWORK_NAME = "lab7net"
     }
 
     stages {
@@ -14,11 +15,17 @@ pipeline {
             }
         }
 
+        stage('Create Network') {
+            steps {
+                sh 'docker network create $NETWORK_NAME || true'
+            }
+        }
+
         stage('Run Container') {
             steps {
                 sh '''
                 docker rm -f $CONTAINER_NAME || true
-                docker run -d -p 8000:8000 --name $CONTAINER_NAME $IMAGE_NAME
+                docker run -d --network $NETWORK_NAME --name $CONTAINER_NAME $IMAGE_NAME
                 '''
             }
         }
@@ -29,7 +36,7 @@ pipeline {
                     timeout(time: 60, unit: 'SECONDS') {
                         waitUntil {
                             def status = sh(
-                                script: "curl -s -o /dev/null -w '%{http_code}' http://localhost:8000/docs",
+                                script: "docker run --rm --network $NETWORK_NAME curlimages/curl:latest -s -o /dev/null -w '%{http_code}' http://$CONTAINER_NAME:8000/docs",
                                 returnStdout: true
                             ).trim()
                             return (status == "200")
@@ -43,7 +50,7 @@ pipeline {
             steps {
                 script {
                     def response = sh(
-                        script: "curl -s -X POST http://localhost:8000/predict -H 'Content-Type: application/json' -d @tests/valid.json",
+                        script: "docker run --rm --network $NETWORK_NAME curlimages/curl:latest -s -X POST http://$CONTAINER_NAME:8000/predict -H 'Content-Type: application/json' -d @tests/valid.json",
                         returnStdout: true
                     ).trim()
 
@@ -60,7 +67,7 @@ pipeline {
             steps {
                 script {
                     def status = sh(
-                        script: "curl -s -o /dev/null -w '%{http_code}' -X POST http://localhost:8000/predict -H 'Content-Type: application/json' -d @tests/invalid.json",
+                        script: "docker run --rm --network $NETWORK_NAME curlimages/curl:latest -s -o /dev/null -w '%{http_code}' -X POST http://$CONTAINER_NAME:8000/predict -H 'Content-Type: application/json' -d @tests/invalid.json",
                         returnStdout: true
                     ).trim()
 
