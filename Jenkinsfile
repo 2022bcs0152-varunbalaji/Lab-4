@@ -18,7 +18,8 @@ pipeline {
         stage('Run Container') {
             steps {
                 sh '''
-                docker run -d -p 8000:8000 --name $CONTAINER_NAME $IMAGE_NAME
+                docker rm -f $CONTAINER_NAME || true
+                docker run -d --name $CONTAINER_NAME $IMAGE_NAME
                 '''
             }
         }
@@ -29,7 +30,7 @@ pipeline {
                     timeout(time: 60, unit: 'SECONDS') {
                         waitUntil {
                             def status = sh(
-                                script: "curl -s -o /dev/null -w '%{http_code}' http://localhost:8000/docs",
+                                script: "docker exec $CONTAINER_NAME curl -s -o /dev/null -w '%{http_code}' http://localhost:8000/docs",
                                 returnStdout: true
                             ).trim()
                             return (status == "200")
@@ -43,9 +44,9 @@ pipeline {
             steps {
                 script {
                     def response = sh(
-                        script: "curl -s -X POST http://localhost:8000/predict -H 'Content-Type: application/json' -d @tests/valid.json",
+                        script: "docker exec $CONTAINER_NAME curl -s -X POST http://localhost:8000/predict -H 'Content-Type: application/json' -d @tests/valid.json",
                         returnStdout: true
-                    )
+                    ).trim()
 
                     echo "Valid Response: ${response}"
 
@@ -60,7 +61,7 @@ pipeline {
             steps {
                 script {
                     def status = sh(
-                        script: "curl -s -o /dev/null -w '%{http_code}' -X POST http://localhost:8000/predict -H 'Content-Type: application/json' -d @tests/invalid.json",
+                        script: "docker exec $CONTAINER_NAME curl -s -o /dev/null -w '%{http_code}' -X POST http://localhost:8000/predict -H 'Content-Type: application/json' -d @tests/invalid.json",
                         returnStdout: true
                     ).trim()
 
@@ -82,11 +83,11 @@ pipeline {
     }
 
     post {
-        failure {
-            echo "Pipeline FAILED ❌"
-        }
         success {
-            echo "Pipeline PASSED ✅"
+            echo "Pipeline PASSED "
+        }
+        failure {
+            echo "Pipeline FAILED "
         }
     }
 }
