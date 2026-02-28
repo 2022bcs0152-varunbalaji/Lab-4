@@ -35,18 +35,15 @@ pipeline {
                 script {
                     timeout(time: 60, unit: 'SECONDS') {
                         waitUntil {
-                            def status = sh(
-                                script: """
-                                docker run --rm --network $NETWORK_NAME curlimages/curl:latest sh -lc \
-                                "code=\$(curl -s -o /dev/null -w '%{http_code}' http://$CONTAINER_NAME:8000/health 2>/dev/null || true); echo \${code:-000}"
-                                """,
-                                returnStdout: true
-                            ).trim()
-                            if (status != "200") {
-                                echo "Healthcheck HTTP status: ${status}"
+                            def rc = sh(
+                                script: 'docker run --rm --network $NETWORK_NAME curlimages/curl:latest -sf -o /dev/null http://$CONTAINER_NAME:8000/health',
+                                returnStatus: true
+                            )
+                            if (rc != 0) {
+                                echo "Healthcheck not ready yet (rc=${rc}), retrying..."
                                 sleep 2
                             }
-                            return (status == "200")
+                            return (rc == 0)
                         }
                     }
                 }
@@ -56,37 +53,21 @@ pipeline {
         stage('Send Valid Inference Request') {
             steps {
                 script {
-                    def output = sh(
-                        script: """
-                        docker run --rm --network $NETWORK_NAME -v \"$WORKSPACE\":/work curlimages/curl:latest \
-                        -s -o - -w '\\n%{http_code}' \
-                        -X POST http://$CONTAINER_NAME:8000/predict \
+                    def response = sh(
+                        script: '''
+                        docker run --rm --network $NETWORK_NAME \
+                        -v "$WORKSPACE":/work \
+                        curlimages/curl:latest \
+                        -s -X POST http://$CONTAINER_NAME:8000/predict \
                         -H "Content-Type: application/json" \
-                        -d "\$(cat /work/tests/valid.json)"
-                        """,
+                        -d @/work/tests/valid.json
+                        ''',
                         returnStdout: true
                     ).trim()
 
-                    def splitIndex = output.lastIndexOf("\n")
-                    def body
-                    def status
-                    if (splitIndex >= 0) {
-                        body = output.substring(0, splitIndex)
-                        status = output.substring(splitIndex + 1)
-                    } else {
-                        def literalSepIndex = output.lastIndexOf("\\\\n")
-                        body = (literalSepIndex >= 0) ? output.substring(0, literalSepIndex) : output
-                        status = (literalSepIndex >= 0) ? output.substring(literalSepIndex + 2) : ""
-                    }
+                    echo "Valid Response: ${response}"
 
-                    echo "Valid Response Status: ${status}"
-                    echo "Valid Response Body: ${body}"
-
-                    if (status != "200") {
-                        error("Valid request did not return 200")
-                    }
-
-                    if (!body.contains('"wine_quality"')) {
+                    if (!response.contains('"wine_quality"')) {
                         error("wine_quality field missing in valid response")
                     }
                 }
@@ -96,21 +77,23 @@ pipeline {
         stage('Send Invalid Request') {
             steps {
                 script {
-                    def status = sh(
-                        script: """
-                        docker run --rm --network $NETWORK_NAME -v \"$WORKSPACE\":/work curlimages/curl:latest \
-                        -s -o /dev/null -w '%{http_code}' \
+                    def rc = sh(
+                        script: '''
+                        docker run --rm --network $NETWORK_NAME \
+                        -v "$WORKSPACE":/work \
+                        curlimages/curl:latest \
+                        -s -f -o /dev/null \
                         -X POST http://$CONTAINER_NAME:8000/predict \
                         -H "Content-Type: application/json" \
-                        -d "\$(cat /work/tests/invalid.json)"
-                        """,
-                        returnStdout: true
-                    ).trim()
+                        -d @/work/tests/invalid.json
+                        ''',
+                        returnStatus: true
+                    )
 
-                    echo "Invalid Request Status: ${status}"
+                    echo "Invalid Request exit code: ${rc}"
 
-                    if (status == "200") {
-                        error("Invalid request should not return 200")
+                    if (rc == 0) {
+                        error("Invalid request should not succeed")
                     }
                 }
             }
