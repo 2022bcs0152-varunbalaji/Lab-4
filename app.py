@@ -1,9 +1,14 @@
+import sys
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 import joblib
 import numpy as np
 from pathlib import Path
+
+print("[STARTUP] Wine Quality Inference API starting...", flush=True)
+print(f"[STARTUP] Python: {sys.version}", flush=True)
+print(f"[STARTUP] Working directory: {Path.cwd()}", flush=True)
 
 app = FastAPI(title="Wine Quality Inference API")
 
@@ -14,10 +19,13 @@ _model_load_error = None
 try:
     if MODEL_PATH.exists():
         _model = joblib.load(str(MODEL_PATH))
+        print(f"[STARTUP] Model loaded successfully from {MODEL_PATH.resolve()}", flush=True)
     else:
         _model_load_error = f"Model file not found: {MODEL_PATH.resolve()}"
+        print(f"[STARTUP] ERROR: {_model_load_error}", flush=True)
 except Exception as exc:  # noqa: BLE001
     _model_load_error = str(exc)
+    print(f"[STARTUP] ERROR loading model: {_model_load_error}", flush=True)
 
 class WineInput(BaseModel):
     fixed_acidity: float
