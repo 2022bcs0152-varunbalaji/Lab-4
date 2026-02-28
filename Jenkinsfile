@@ -9,9 +9,9 @@ pipeline {
 
     stages {
 
-        stage('Pull Image') {
+        stage('Build Image') {
             steps {
-                sh 'docker pull $IMAGE_NAME'
+                sh 'docker build -t $IMAGE_NAME .'
             }
         }
 
@@ -39,11 +39,14 @@ pipeline {
                                 script: """
                                 docker run --rm --network $NETWORK_NAME curlimages/curl:latest \
                                 -s -o /dev/null -w '%{http_code}' \
-                                http://$CONTAINER_NAME:8000/docs
+                                http://$CONTAINER_NAME:8000/health
                                 """,
                                 returnStdout: true
                             ).trim()
-
+                            if (status != "200") {
+                                echo "Healthcheck HTTP status: ${status}"
+                                sleep 2
+                            }
                             return (status == "200")
                         }
                     }
@@ -54,20 +57,30 @@ pipeline {
         stage('Send Valid Inference Request') {
             steps {
                 script {
-                    def response = sh(
+                    def output = sh(
                         script: """
-                        docker run --rm --network $NETWORK_NAME curlimages/curl:latest \
-                        -s -X POST http://$CONTAINER_NAME:8000/predict \
+                        docker run --rm --network $NETWORK_NAME -v \"$WORKSPACE\":/work curlimages/curl:latest \
+                        -s -o - -w '\n%{http_code}' \
+                        -X POST http://$CONTAINER_NAME:8000/predict \
                         -H "Content-Type: application/json" \
-                        -d '{"fixed acidity":7.4,"volatile acidity":0.7,"citric acid":0,"residual sugar":1.9,"chlorides":0.076,"free sulfur dioxide":11,"total sulfur dioxide":34,"density":0.9978,"pH":3.51,"sulphates":0.56,"alcohol":9.4}'
+                        -d @/work/tests/valid.json
                         """,
                         returnStdout: true
                     ).trim()
 
-                    echo "Valid Response: ${response}"
+                    def splitIndex = output.lastIndexOf("\n")
+                    def body = (splitIndex >= 0) ? output.substring(0, splitIndex) : output
+                    def status = (splitIndex >= 0) ? output.substring(splitIndex + 1) : ""
 
-                    if (!response.contains("prediction")) {
-                        error("Prediction field missing in valid response")
+                    echo "Valid Response Status: ${status}"
+                    echo "Valid Response Body: ${body}"
+
+                    if (status != "200") {
+                        error("Valid request did not return 200")
+                    }
+
+                    if (!body.contains('"wine_quality"')) {
+                        error("wine_quality field missing in valid response")
                     }
                 }
             }
@@ -78,11 +91,11 @@ pipeline {
                 script {
                     def status = sh(
                         script: """
-                        docker run --rm --network $NETWORK_NAME curlimages/curl:latest \
+                        docker run --rm --network $NETWORK_NAME -v \"$WORKSPACE\":/work curlimages/curl:latest \
                         -s -o /dev/null -w '%{http_code}' \
                         -X POST http://$CONTAINER_NAME:8000/predict \
                         -H "Content-Type: application/json" \
-                        -d '{"invalid":123}'
+                        -d @/work/tests/invalid.json
                         """,
                         returnStdout: true
                     ).trim()
@@ -95,18 +108,15 @@ pipeline {
                 }
             }
         }
-
-        stage('Stop Container') {
-            steps {
-                sh '''
-                docker stop $CONTAINER_NAME || true
-                docker rm $CONTAINER_NAME || true
-                '''
-            }
-        }
     }
 
     post {
+        always {
+            sh '''
+            docker stop $CONTAINER_NAME || true
+            docker rm -f $CONTAINER_NAME || true
+            '''
+        }
         success {
             echo "Pipeline PASSED  - Inference API is valid"
         }
