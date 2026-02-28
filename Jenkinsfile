@@ -55,7 +55,7 @@ pipeline {
                 script {
                     def response = sh(
                         script: '''
-                        docker run --rm --network $NETWORK_NAME \
+                        docker run --rm --user root --network $NETWORK_NAME \
                         -v "$WORKSPACE":/work \
                         curlimages/curl:latest \
                         -s -X POST http://$CONTAINER_NAME:8000/predict \
@@ -79,7 +79,7 @@ pipeline {
                 script {
                     def rc = sh(
                         script: '''
-                        docker run --rm --network $NETWORK_NAME \
+                        docker run --rm --user root --network $NETWORK_NAME \
                         -v "$WORKSPACE":/work \
                         curlimages/curl:latest \
                         -s -f -o /dev/null \
