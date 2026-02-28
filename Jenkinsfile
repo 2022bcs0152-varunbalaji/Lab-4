@@ -60,17 +60,25 @@ pipeline {
                     def output = sh(
                         script: """
                         docker run --rm --network $NETWORK_NAME -v \"$WORKSPACE\":/work curlimages/curl:latest \
-                        -s -o - -w '\n%{http_code}' \
+                        -s -o - -w '\\n%{http_code}' \
                         -X POST http://$CONTAINER_NAME:8000/predict \
                         -H "Content-Type: application/json" \
-                        -d @/work/tests/valid.json
+                        -d "\$(cat /work/tests/valid.json)"
                         """,
                         returnStdout: true
                     ).trim()
 
                     def splitIndex = output.lastIndexOf("\n")
-                    def body = (splitIndex >= 0) ? output.substring(0, splitIndex) : output
-                    def status = (splitIndex >= 0) ? output.substring(splitIndex + 1) : ""
+                    def body
+                    def status
+                    if (splitIndex >= 0) {
+                        body = output.substring(0, splitIndex)
+                        status = output.substring(splitIndex + 1)
+                    } else {
+                        def literalSepIndex = output.lastIndexOf("\\\\n")
+                        body = (literalSepIndex >= 0) ? output.substring(0, literalSepIndex) : output
+                        status = (literalSepIndex >= 0) ? output.substring(literalSepIndex + 2) : ""
+                    }
 
                     echo "Valid Response Status: ${status}"
                     echo "Valid Response Body: ${body}"
@@ -95,7 +103,7 @@ pipeline {
                         -s -o /dev/null -w '%{http_code}' \
                         -X POST http://$CONTAINER_NAME:8000/predict \
                         -H "Content-Type: application/json" \
-                        -d @/work/tests/invalid.json
+                        -d "\$(cat /work/tests/invalid.json)"
                         """,
                         returnStdout: true
                     ).trim()
