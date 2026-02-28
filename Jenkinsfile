@@ -57,10 +57,8 @@ pipeline {
                         script: '''
                         docker run --rm --user root --network $NETWORK_NAME \
                         -v "$WORKSPACE":/work \
-                        curlimages/curl:latest \
-                        -s -X POST http://$CONTAINER_NAME:8000/predict \
-                        -H "Content-Type: application/json" \
-                        -d @/work/tests/valid.json
+                        --entrypoint sh curlimages/curl:latest \
+                        -c 'curl -s -X POST http://wine_test_container:8000/predict -H "Content-Type: application/json" -d @/work/tests/valid.json'
                         ''',
                         returnStdout: true
                     ).trim()
@@ -81,11 +79,8 @@ pipeline {
                         script: '''
                         docker run --rm --user root --network $NETWORK_NAME \
                         -v "$WORKSPACE":/work \
-                        curlimages/curl:latest \
-                        -s -f -o /dev/null \
-                        -X POST http://$CONTAINER_NAME:8000/predict \
-                        -H "Content-Type: application/json" \
-                        -d @/work/tests/invalid.json
+                        --entrypoint sh curlimages/curl:latest \
+                        -c 'curl -s -f -o /dev/null -X POST http://wine_test_container:8000/predict -H "Content-Type: application/json" -d @/work/tests/invalid.json'
                         ''',
                         returnStatus: true
                     )
