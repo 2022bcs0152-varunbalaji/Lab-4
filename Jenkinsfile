@@ -37,9 +37,8 @@ pipeline {
                         waitUntil {
                             def status = sh(
                                 script: """
-                                docker run --rm --network $NETWORK_NAME curlimages/curl:latest \
-                                -s -o /dev/null -w '%{http_code}' \
-                                http://$CONTAINER_NAME:8000/health
+                                docker run --rm --network $NETWORK_NAME curlimages/curl:latest sh -lc \
+                                "code=\$(curl -s -o /dev/null -w '%{http_code}' http://$CONTAINER_NAME:8000/health 2>/dev/null || true); echo \${code:-000}"
                                 """,
                                 returnStdout: true
                             ).trim()
